@@ -16,6 +16,9 @@ const paliers = read("sql/paliers_reglables.sql");
 const brouillons = read("sql/brouillons.sql");
 const correctifValidation = read("sql/correctif_validation_brouillons.sql");
 const reservationImmediate = read("sql/reservation_immediate.sql");
+const registreCommun = read("sql/registre_commun.sql");
+const registreBackup = read("sql/registre_commun_backup.sql");
+const registreRollback = read("sql/registre_commun_rollback.sql");
 const reglages = read("pwa/js/pages/reglages.js");
 const api = read("pwa/js/api.js");
 const accueil = read("pwa/js/pages/accueil.js");
@@ -85,6 +88,46 @@ test("réduire ou augmenter une réservation ne porte que sur la différence",
   reservationModele(30, 0, 50, true).delta === 20 &&
   reservationModele(100, 20, 30, true).reservee === 50 &&
   reservationModele(100, 20, 30, true).delta === -20);
+
+// ---- Registre commun (migration additive Phase 2) ----
+test("la migration du registre commun est additive (colonnes IF NOT EXISTS)",
+  registreCommun.includes("add column if not exists app_id") &&
+  registreCommun.includes("add column if not exists kind") &&
+  registreCommun.includes("add column if not exists idempotency_key") &&
+  registreCommun.includes("add column if not exists occurred_at") &&
+  registreCommun.includes("add column if not exists metadata"));
+test("la migration ne supprime ni ne modifie aucun montant comptable",
+  !/\bdelete\s+from\s+eclats_ledger\b/i.test(registreCommun) &&
+  !/update\s+eclats_ledger[\s\S]*\bset\b[\s\S]*\bamount\s*=/i.test(registreCommun));
+test("l'index d'idempotence est unique par (user_id, idempotency_key)",
+  registreCommun.includes(
+    "create unique index if not exists eclats_ledger_idem_uidx") &&
+  registreCommun.includes("on eclats_ledger (user_id, idempotency_key)"));
+test("les nouvelles fonctions fixent search_path",
+  (registreCommun.match(/set search_path = public/g) || []).length >= 6);
+test("les droits sont révoqués puis accordés à authenticated seulement",
+  /revoke all on function eclats_spend\([^)]*\)\s*from public, anon/.test(registreCommun) &&
+  /grant execute on function eclats_spend\([^)]*\)\s*to authenticated/.test(registreCommun) &&
+  /revoke all on function eclats_refund\([^)]*\)\s*from public, anon/.test(registreCommun) &&
+  !registreCommun.includes("to anon") && !/grant[^;]*to service_role/.test(registreCommun));
+test("le spend est plafonné au solde et idempotent",
+  registreCommun.includes("v_spent := least(p_amount, v_available)") &&
+  registreCommun.includes("idempotency_key = p_idempotency_key") &&
+  registreCommun.includes("'idempotent_replay', true"));
+test("le refund est exactement-une-fois et compensatoire",
+  registreCommun.includes("v_refund := v_spent - v_already_refunded") &&
+  registreCommun.includes("Dépense déjà remboursée") &&
+  registreCommun.includes("'refund'"));
+test("Pronos reste compatible via le trigger de remplissage du contrat",
+  registreCommun.includes("create trigger trg_eclats_fill_contract") &&
+  registreCommun.includes("eclats_ledger_fill_contract()") &&
+  registreCommun.includes("coalesce(new.idempotency_key, 'auto:' || new.id::text)"));
+test("la migration est encadrée par une transaction",
+  /^\s*begin;/m.test(registreCommun) && /\bcommit;\s*$/.test(registreCommun.trim()));
+test("sauvegarde et rollback sont fournis et non destructifs",
+  registreBackup.includes("create table if not exists eclats_ledger_sauvegarde_") &&
+  registreRollback.includes("aucune suppression comptable") &&
+  !/\bdelete\s+from\s+eclats_ledger\b/i.test(registreRollback));
 
 const maintenant = Date.parse("2026-07-24T18:00:00Z");
 const futur = { status: "scheduled", kickoff_at: "2026-07-24T19:00:00Z" };
