@@ -36,18 +36,18 @@ from (
   having count(*) > 1
 ) d;
 
--- F. Objets attendus présents. Attendu : 1 trigger, 1 index unique, 4 fonctions.
+-- F. Objets attendus présents. Attendu : 1 trigger, 1 index unique, 5 fonctions.
 select
   (select count(*) from pg_trigger where tgname = 'trg_eclats_fill_contract') as triggers,
   (select count(*) from pg_indexes where indexname = 'eclats_ledger_idem_uidx') as index_unique,
   (select count(*) from pg_proc
-     where proname in ('eclats_balance','eclats_spend','eclats_refund','eclats_aggregates_by_app')) as fonctions;
+     where proname in ('eclats_balance','eclats_spend','eclats_refund','eclats_reward','eclats_aggregates_by_app')) as fonctions;
 
 -- G. Droits : anon ne peut pas exécuter les RPC d'écriture. Attendu : 0.
 select count(*) as droits_anon_indus
 from information_schema.role_routine_grants
 where grantee = 'anon'
-  and routine_name in ('eclats_spend','eclats_refund');
+  and routine_name in ('eclats_spend','eclats_refund','eclats_reward');
 
 -- H. RLS toujours active sur le journal. Attendu : rowsecurity = true.
 select relname, relrowsecurity as rls_active

@@ -347,6 +347,80 @@ revoke all on function eclats_refund(text, text, uuid, text, text, jsonb)
 grant execute on function eclats_refund(text, text, uuid, text, text, jsonb)
   to authenticated;
 
+-- ---- Récompense (reward) : crédit idempotent ----
+-- Crédite des Éclats GAGNÉS dans une application (validation Discipline, gains
+-- Pronos, écriture Rédac, quiz Mémo…). Idempotente par clé : rejouer la même clé
+-- ne crédite jamais deux fois. Pour une récompense « une seule fois par jour »,
+-- utiliser une clé datée, ex. 'discipline:habitude:<id>:2026-07-25'.
+-- reference_id est facultatif (les identifiants métier non-uuid vont dans metadata).
+create or replace function eclats_reward(
+  p_app_id          text,
+  p_amount          numeric,
+  p_reason          text,
+  p_reference_type  text,
+  p_idempotency_key text,
+  p_reference_id    uuid default null,
+  p_metadata        jsonb default null
+) returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user     uuid := auth.uid();
+  v_existing eclats_ledger%rowtype;
+  v_row      eclats_ledger%rowtype;
+  v_balance  numeric;
+begin
+  if v_user is null then raise exception 'Non authentifié'; end if;
+  if p_app_id is null or p_app_id = '' then raise exception 'app_id requis'; end if;
+  if p_amount is null or p_amount <= 0 then raise exception 'Montant invalide'; end if;
+  if p_idempotency_key is null or length(p_idempotency_key) < 8 then
+    raise exception 'Clé d''idempotence invalide';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(v_user::text));
+
+  -- Idempotence : même clé déjà enregistrée → renvoyer le mouvement, sans re-crédit.
+  select * into v_existing
+  from eclats_ledger
+  where user_id = v_user and idempotency_key = p_idempotency_key;
+  if found then
+    select coalesce(sum(amount), 0) into v_balance
+    from eclats_ledger where user_id = v_user;
+    return jsonb_build_object(
+      'movement_id', v_existing.id,
+      'amount', v_existing.amount,
+      'balance_after', v_balance,
+      'idempotent_replay', true
+    );
+  end if;
+
+  insert into eclats_ledger (
+    user_id, amount, source, reference_id,
+    app_id, kind, reason, reference_type, idempotency_key, occurred_at, metadata
+  ) values (
+    v_user, p_amount, p_app_id || '_reward', p_reference_id,
+    p_app_id, 'reward', p_reason, p_reference_type, p_idempotency_key, now(), p_metadata
+  )
+  returning * into v_row;
+
+  select coalesce(sum(amount), 0) into v_balance
+  from eclats_ledger where user_id = v_user;
+  return jsonb_build_object(
+    'movement_id', v_row.id,
+    'amount', p_amount,
+    'balance_after', v_balance,
+    'idempotent_replay', false
+  );
+end
+$$;
+
+revoke all on function eclats_reward(text, numeric, text, text, text, uuid, jsonb)
+  from public, anon;
+grant execute on function eclats_reward(text, numeric, text, text, text, uuid, jsonb)
+  to authenticated;
+
 -- ---- Agrégats par application (lecture seule, pour Centrale) ----
 create or replace function eclats_aggregates_by_app()
 returns table (

@@ -12,6 +12,7 @@
 
 -- --- 1. Retrait des RPC et du trigger ajoutés (réversible, sans perte) ---
 drop function if exists eclats_aggregates_by_app();
+drop function if exists eclats_reward(text, numeric, text, text, text, uuid, jsonb);
 drop function if exists eclats_refund(text, text, uuid, text, text, jsonb);
 drop function if exists eclats_spend(text, numeric, text, text, uuid, text, jsonb);
 drop function if exists eclats_balance();

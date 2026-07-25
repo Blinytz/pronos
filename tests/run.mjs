@@ -19,6 +19,7 @@ const reservationImmediate = read("sql/reservation_immediate.sql");
 const registreCommun = read("sql/registre_commun.sql");
 const registreBackup = read("sql/registre_commun_backup.sql");
 const registreRollback = read("sql/registre_commun_rollback.sql");
+const registreSeed = read("sql/registre_commun_seed_test.sql");
 const reglages = read("pwa/js/pages/reglages.js");
 const api = read("pwa/js/api.js");
 const accueil = read("pwa/js/pages/accueil.js");
@@ -122,6 +123,17 @@ test("Pronos reste compatible via le trigger de remplissage du contrat",
   registreCommun.includes("create trigger trg_eclats_fill_contract") &&
   registreCommun.includes("eclats_ledger_fill_contract()") &&
   registreCommun.includes("coalesce(new.idempotency_key, 'auto:' || new.id::text)"));
+test("le reward crédite (positif), est idempotent et réservé à authenticated",
+  registreCommun.includes("create or replace function eclats_reward(") &&
+  registreCommun.includes("p_app_id || '_reward'") &&
+  registreCommun.includes("'reward'") &&
+  /revoke all on function eclats_reward\([^)]*\)\s*from public, anon/.test(registreCommun) &&
+  /grant execute on function eclats_reward\([^)]*\)\s*to authenticated/.test(registreCommun));
+test("le crédit de test de 2500 est idempotent et sans suppression",
+  registreSeed.includes("2500") &&
+  registreSeed.includes("seed:credit-initial-2500") &&
+  registreSeed.includes("where not exists (") &&
+  !/\bdelete\s+from\s+eclats_ledger\b/i.test(registreSeed));
 test("la migration est encadrée par une transaction",
   /^\s*begin;/m.test(registreCommun) && /\bcommit;\s*$/.test(registreCommun.trim()));
 test("sauvegarde et rollback sont fournis et non destructifs",
