@@ -3,15 +3,26 @@
 
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
-const CLE_SESSION = 'ps_session';
+// Session partagée avec tout l'écosystème (même origine github.io) : se
+// connecter dans une app connecte les autres. `ps_session` est l'ancienne clé
+// propre à Pronos, reprise une seule fois pour ne pas déconnecter l'existant.
+const CLE_SESSION = 'eclats_session';
+const ANCIENNE_CLE = 'ps_session';
 let session = null;
-try { session = JSON.parse(localStorage.getItem(CLE_SESSION) || 'null'); } catch { /* session corrompue */ }
+try {
+  session = JSON.parse(
+    localStorage.getItem(CLE_SESSION) || localStorage.getItem(ANCIENNE_CLE) || 'null');
+} catch { /* session corrompue */ }
 
 function sauverSession(s) {
   session = s;
   if (s) localStorage.setItem(CLE_SESSION, JSON.stringify(s));
   else localStorage.removeItem(CLE_SESSION);
+  localStorage.removeItem(ANCIENNE_CLE);
 }
+
+// Reprise immédiate de l'ancienne session sous la clé commune, si besoin.
+if (session && !localStorage.getItem(CLE_SESSION)) sauverSession(session);
 
 export function utilisateur() {
   return session ? session.user : null;
