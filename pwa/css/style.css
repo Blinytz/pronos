@@ -116,6 +116,23 @@ main {
   display: flex; align-items: center; justify-content: center; padding: 0 4px;
 }
 
+/* ---------- Barres de pilotage (page Paris) ----------
+   Jour, compétition et mise restent atteignables pendant le défilement :
+   changer l'un des trois ne doit jamais obliger à remonter en haut. */
+.barres-collantes {
+  position: sticky; top: var(--entete-h); z-index: 15;
+  background: var(--fond);
+  margin: -.75rem -.9rem .5rem;
+  padding: .4rem .9rem .3rem;
+  box-shadow: 0 6px 10px -8px rgba(29, 26, 22, .28);
+}
+.barres-collantes .bandeau-dates,
+.barres-collantes .filtres,
+.barres-collantes .mises-rapides { position: static; margin: 0; }
+.barres-collantes .bandeau-dates { padding: 0 0 .3rem; }
+.barres-collantes .filtres { padding-bottom: .3rem; margin-bottom: .25rem; }
+.barres-collantes .mises-rapides { padding-bottom: 0; margin-bottom: 0; }
+
 /* ---------- Sélecteur de dates ---------- */
 .bandeau-dates {
   position: sticky; top: var(--entete-h); z-index: 15;
@@ -230,6 +247,17 @@ a.carte:active { transform: scale(.995); }
   border-color: var(--or); background: #fdf6e0; color: var(--or-fonce);
 }
 .case-score:disabled { opacity: .7; }
+
+/* Pronostic effectivement enregistré côté serveur : la pastille lève le
+   doute entre « j'ai tapé un score » et « il est bien pris en compte ». */
+.cases-saisie { position: relative; }
+.cases-saisie.enregistre::after {
+  content: '✓ enregistré';
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: -1.05rem; white-space: nowrap;
+  font-size: .62rem; font-weight: 700; color: var(--vert);
+}
+.cases-saisie.enregistre { margin-bottom: 1.05rem; }
 .score-fige {
   width: 3rem; height: 3rem; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;

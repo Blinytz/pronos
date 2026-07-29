@@ -12,7 +12,7 @@ import {
   classeCasesPronostic, classeGainPari, etatTemporelMatch, matchOuvert,
 } from '../etat-prono.js';
 import { embleme, nomLigue, trierLigues } from '../ordre-ligues.js';
-import { brancherCases, casesScore } from '../saisie.js';
+import { brancherCases, casesScore, puceMises } from '../saisie.js';
 import {
   blason, cleJour, echapper, eclats, erreur, gainPari, heure, libelleBonus,
   nombre, squelettes, toast, vide,
@@ -102,10 +102,14 @@ async function rendre(conteneur) {
     : vide('📅', 'Aucun match ce jour',
         'Change de date ou de compétition avec les filtres ci-dessus.');
 
+  // Les trois barres restent accessibles pendant le défilement : changer
+  // de jour, de compétition ou de mise ne doit jamais obliger à remonter.
   conteneur.innerHTML = `
-    ${bandeauDates()}
-    ${bandeauFiltres()}
-    ${bandeauMises(mise)}
+    <div class="barres-collantes">
+      ${bandeauDates()}
+      ${bandeauFiltres()}
+      ${puceMises(mise)}
+    </div>
     <div id="jour-courant">${liste}</div>`;
   brancherBandeaux(conteneur);
   brancherMises(conteneur);
@@ -113,25 +117,15 @@ async function rendre(conteneur) {
   brancherGlissement(conteneur);
 }
 
-// Puces de mise par défaut : un raccourci pour changer rapidement le
-// montant des paris rapides sans passer par les réglages.
-const MISES = [10, 25, 50, 100, 250, 500, 1000];
-
-function bandeauMises(mise) {
-  return `<div class="mises-rapides">
-    <span class="etiquette">Mise</span>
-    ${MISES.map((v) => `<button class="puce-mise ${v === mise ? 'actif' : ''}"
-      data-mise="${v}">${nombre(v)}</button>`).join('')}
-  </div>`;
-}
-
 function brancherMises(conteneur) {
   conteneur.querySelectorAll('.puce-mise').forEach((b) => {
     b.addEventListener('click', async () => {
       const v = Number(b.dataset.mise);
+      const position = window.scrollY;   // le changement ne doit pas déplacer la vue
       try {
         await majMiseParDefaut(v);
-        rendre(conteneur);   // les pronos déjà enregistrés gardent leur mise
+        await rendre(conteneur);   // les pronos déjà enregistrés gardent leur mise
+        window.scrollTo(0, position);
       } catch (e) {
         toast(e.message, 'echec');
       }

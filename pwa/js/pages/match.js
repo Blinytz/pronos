@@ -12,7 +12,7 @@ import {
   classeCasesPronostic, classeGainPari, etatTemporelMatch, matchOuvert,
 } from '../etat-prono.js';
 import { embleme, nomLigue } from '../ordre-ligues.js';
-import { brancherCases, casesScore } from '../saisie.js';
+import { brancherCases, casesScore, puceMises } from '../saisie.js';
 import {
   badgesForme, blason, dateHeure, echapper, eclats, envoyerPieces, erreur,
   formeDepuisMatchs, gainPari, libelleBonus, nombre, ordinal, probaImplicite,
@@ -209,8 +209,9 @@ function blocPronostic(match, cotes, reglages, brouillon) {
         ${casesScore(match, brouillon, { mise })}
         <span class="faible centre">${echapper(match.away?.name)}</span>
       </div>
-      <div class="rangee-mise" style="margin-top:.8rem">
-        <label>Mise en Éclats
+      ${puceMises(mise)}
+      <div class="rangee-mise">
+        <label>Autre montant
           <input type="number" id="pari-mise" min="1" step="10" value="${mise}"></label>
       </div>
       <div class="apercu-gains" id="apercu-gains" ${brouillon ? '' : 'hidden'}>
@@ -237,8 +238,8 @@ function brancherPronostic(conteneur, match, cotes, reglages, brouillon) {
   const bonusExact = estRugby
     ? (Number(reglages?.bonus_score_exact_rugby) || 10)
     : (Number(reglages?.bonus_score_exact) || 2);
-  const champs = [...conteneur.querySelectorAll('.cases-score .case-score')];
-  const blocCases = conteneur.querySelector('.cases-score');
+  const champs = [...conteneur.querySelectorAll('.cases-saisie .case-score')];
+  const blocCases = conteneur.querySelector('.cases-saisie');
 
   const appliquerReservation = (resultat) => {
     if (!resultat || resultat.deleted) return;
@@ -290,27 +291,47 @@ function brancherPronostic(conteneur, match, cotes, reglages, brouillon) {
   // mise portée par les cases pour qu'une modif de score ultérieure la
   // conserve (au lieu de retomber sur la mise par défaut).
   let minuteurMise = null;
-  miseChamp.addEventListener('input', () => {
-    if (blocCases) blocCases.dataset.mise = Number(miseChamp.value) || 100;
+
+  const marquerPuceActive = (valeur) => {
+    conteneur.querySelectorAll('.puce-mise').forEach((p) => {
+      p.classList.toggle('actif', Number(p.dataset.mise) === Number(valeur));
+    });
+  };
+
+  const enregistrerMise = async () => {
+    const [ph, pa] = champs.map((c) => c.value.trim());
+    if (ph === '' || pa === '') return;   // rien à réserver sans score
+    try {
+      const resultat = await enregistrerBrouillon(match.id, Number(ph), Number(pa),
+        Number(miseChamp.value) || 100);
+      appliquerReservation(resultat);
+      marquerPuceActive(resultat?.stake_eclats || miseChamp.value);
+      window.dispatchEvent(new Event('eclats-changes'));
+      retour.textContent = resultat?.adjusted
+        ? `Mise ramenée à ${eclats(resultat.stake_eclats)} ✦ selon le solde disponible`
+        : `Mise de ${eclats(resultat?.stake_eclats)} ✦ réservée ✓`;
+      majApercu();
+    } catch (e) {
+      toast(e.message, 'echec');
+    }
+  };
+
+  const appliquerMise = (valeur, { immediat = false } = {}) => {
+    miseChamp.value = valeur;
+    if (blocCases) blocCases.dataset.mise = Number(valeur) || 100;
+    marquerPuceActive(valeur);
     majApercu();
     clearTimeout(minuteurMise);
-    minuteurMise = setTimeout(async () => {
-      const [ph, pa] = champs.map((c) => c.value.trim());
-      if (ph === '' || pa === '') return;
-      try {
-        const resultat = await enregistrerBrouillon(match.id, Number(ph), Number(pa),
-          Number(miseChamp.value) || 100);
-        appliquerReservation(resultat);
-        window.dispatchEvent(new Event('eclats-changes'));
-        retour.textContent = resultat?.adjusted
-          ? `Mise ramenée à ${eclats(resultat.stake_eclats)} ✦ selon le solde disponible`
-          : `Mise de ${eclats(resultat?.stake_eclats)} ✦ réservée ✓`;
-        majApercu();
-      } catch (e) {
-        toast(e.message, 'echec');
-      }
-    }, 700);
+    if (immediat) enregistrerMise();
+    else minuteurMise = setTimeout(enregistrerMise, 700);
+  };
+
+  // Puces : un geste. Champ libre : tout autre montant.
+  conteneur.querySelectorAll('.puce-mise').forEach((p) => {
+    p.addEventListener('click', () => appliquerMise(p.dataset.mise, { immediat: true }));
   });
+  miseChamp.addEventListener('input', () => appliquerMise(miseChamp.value));
+  marquerPuceActive(miseChamp.value);
 
   const boutonEffacer = conteneur.querySelector('#effacer-pronostic');
   if (boutonEffacer) {

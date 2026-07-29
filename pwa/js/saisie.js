@@ -19,6 +19,19 @@ import { echapper, eclats, toast } from './ui.js';
 
 const DELAI_ENREGISTREMENT = 700;
 
+// Montants proposés en un geste, partagés par la page Paris (mise par
+// défaut) et la page Match (mise de ce pronostic précis).
+export const MISES = [10, 25, 50, 100, 250, 500, 1000];
+
+// Rangée de puces de mise. `actif` est la valeur actuellement retenue.
+export function puceMises(actif, { etiquette = 'Mise' } = {}) {
+  return `<div class="mises-rapides">
+    ${etiquette ? `<span class="etiquette">${echapper(etiquette)}</span>` : ''}
+    ${MISES.map((v) => `<button type="button" class="puce-mise ${
+      Number(v) === Number(actif) ? 'actif' : ''}" data-mise="${v}">${v}</button>`).join('')}
+  </div>`;
+}
+
 export function chiffresAttendus(sport) {
   return sport === 'rugby' ? 2 : 1;
 }
@@ -30,8 +43,13 @@ export function chiffresAttendus(sport) {
 export function casesScore(match, brouillon, { taille = '', mise = 100 } = {}) {
   const val = (v) => (v === undefined || v === null ? '' : v);
   const miseEffective = brouillon?.stake_eclats ?? mise;
+  // .cases-saisie identifie SANS AMBIGUÏTÉ le bloc modifiable. La classe
+  // .cases-score, elle, sert aussi aux scores figés (en-tête de match,
+  // confrontations directes) : s'y fier ferait brancher la saisie sur le
+  // mauvais bloc, ou pas du tout.
   return `
-    <div class="cases-score" data-match="${match.id}"
+    <div class="cases-score cases-saisie ${brouillon ? 'enregistre' : ''}"
+         data-match="${match.id}"
          data-sport="${echapper(match.league?.sport || 'football')}"
          data-mise="${echapper(miseEffective)}">
       <input class="case-score ${taille} ${val(brouillon?.predicted_home) !== '' ? 'rempli' : ''}"
@@ -57,7 +75,10 @@ export function casesScore(match, brouillon, { taille = '', mise = 100 } = {}) {
  *   - surChangement(home, away) : appelé après enregistrement (facultatif)
  */
 export function brancherCases(racine, { mise, surEtat, surChangement } = {}) {
-  const bloc = racine.querySelector('.cases-score');
+  // Cible le bloc saisissable où qu'il soit dans la page (la page match
+  // contient plusieurs blocs de score figés avant celui-ci).
+  const bloc = racine.matches?.('.cases-saisie')
+    ? racine : racine.querySelector('.cases-saisie');
   if (!bloc || !bloc.dataset.match) return;
   const champs = [...bloc.querySelectorAll('.case-score')];
   if (champs.length !== 2) return;
@@ -78,6 +99,7 @@ export function brancherCases(racine, { mise, surEtat, surChangement } = {}) {
         const suppression = await supprimerBrouillon(bloc.dataset.match);
         const remboursement = Number(suppression?.refunded) || 0;
         bloc.dataset.mise = mise || 100;
+        bloc.classList.remove('enregistre');
         dire(remboursement
           ? `Pronostic effacé · ${eclats(remboursement)} ✦ rendus`
           : 'Pronostic effacé', 'ok');
@@ -96,6 +118,7 @@ export function brancherCases(racine, { mise, surEtat, surChangement } = {}) {
           bloc.dataset.match, Number(h), Number(a), stake);
         const reservee = Number(resultat?.stake_eclats) || stake;
         bloc.dataset.mise = reservee;
+        bloc.classList.add('enregistre');
         dire(resultat?.adjusted
           ? `Enregistré à ${eclats(reservee)} ✦ · solde disponible atteint`
           : `Enregistré · ${eclats(reservee)} ✦ réservés`, 'ok');
