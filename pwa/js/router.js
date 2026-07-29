@@ -54,16 +54,29 @@ const DUREE_MAINTIEN = 1200;
 // doit rendre la main, et pas dans les tout premiers instants.
 const DELAI_AVANT_ABANDON = 300;
 
-// Diagnostic activable en ouvrant l'app avec ?diag=scroll dans l'URL :
-// affiche ce qui a été mémorisé puis réellement restauré. Sert à lever
-// un doute sur un appareil qu'on ne peut pas inspecter directement.
-const DIAGNOSTIC = typeof location !== 'undefined'
-  && location.search.includes('diag=scroll');
+// Diagnostic du défilement : activable depuis la page Réglages (l'app
+// installée n'ouvre pas les liens avec paramètres, un interrupteur est
+// donc plus fiable qu'une URL). Affiche la position visée et celle
+// réellement obtenue, pour lever un doute sur un appareil qu'on ne peut
+// pas inspecter directement.
+function diagnosticActif() {
+  try {
+    return localStorage.getItem('pronos_diag_scroll') === '1'
+      || location.search.includes('diag=scroll');
+  } catch {
+    return false;
+  }
+}
 
 function restaurerPosition(cible, jeton) {
-  if (DIAGNOSTIC) {
-    const vise = cible ? Math.round(cible) : 0;
-    setTimeout(() => toast(`visé ${vise} · obtenu ${Math.round(window.scrollY)}`), 1600);
+  // Message affiché seulement quand une position est réellement visée,
+  // c'est à dire au retour vers une liste : ouvrir une fiche remonte
+  // toujours en haut et n'a rien à signaler.
+  if (cible && diagnosticActif()) {
+    setTimeout(
+      () => toast(`visé ${Math.round(cible)} · obtenu ${Math.round(window.scrollY)}`),
+      2200,
+    );
   }
   if (!cible) { window.scrollTo(0, 0); return; }
   restaurationEnCours = true;

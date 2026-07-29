@@ -133,6 +133,13 @@ main {
 .barres-collantes .filtres { padding-bottom: .3rem; margin-bottom: .25rem; }
 .barres-collantes .mises-rapides { padding-bottom: 0; margin-bottom: 0; }
 
+/* Interrupteur simple dans les réglages */
+.ligne-interrupteur {
+  display: flex; align-items: center; gap: .55rem;
+  margin: 0; cursor: pointer;
+}
+.ligne-interrupteur input { width: 1.15rem; height: 1.15rem; margin: 0; }
+
 /* ---------- Retour depuis une page de détail ---------- */
 .bouton-retour {
   display: inline-flex; align-items: center; gap: .35rem;

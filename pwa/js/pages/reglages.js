@@ -71,11 +71,76 @@ export async function pageReglages(conteneur) {
             Réinitialiser les réglages du modèle</button>
         </div>
         <p id="retour-reglages" class="faible"></p>
-      </form>`;
+      </form>
+
+      <h2>Application</h2>
+      <div class="carte champ-reglage">
+        <p class="faible">Version installée : <strong id="version-app">…</strong></p>
+        <p class="aide">Si ce numéro ne correspond pas à la dernière version,
+          l'appareil utilise encore une copie en mémoire. Le bouton
+          ci-dessous la remplace et relance l'application.</p>
+        <div class="rangee-boutons">
+          <button type="button" id="forcer-maj" class="btn-fantome">
+            Forcer la mise à jour</button>
+        </div>
+      </div>
+      <div class="carte champ-reglage">
+        <label class="ligne-interrupteur">
+          <input type="checkbox" id="diag-scroll">
+          <strong>Diagnostic du défilement</strong>
+        </label>
+        <p class="aide">Affiche, à chaque retour vers une liste, la position
+          visée et celle réellement obtenue. À n'activer que pour un test.</p>
+      </div>`;
     brancher(conteneur, paliers);
+    brancherOutils(conteneur);
   } catch (e) {
     conteneur.innerHTML = erreur(e);
   }
+}
+
+// Outils de maintenance : savoir quelle version tourne réellement sur
+// l'appareil, la remplacer de force, et activer le diagnostic.
+function brancherOutils(conteneur) {
+  const zoneVersion = conteneur.querySelector('#version-app');
+  const interrupteur = conteneur.querySelector('#diag-scroll');
+  const boutonMaj = conteneur.querySelector('#forcer-maj');
+
+  // La version qui fait foi est celle du cache réellement actif.
+  (async () => {
+    try {
+      const cles = await caches.keys();
+      const cle = cles.find((c) => c.startsWith('pronos-'));
+      zoneVersion.textContent = cle || 'aucune copie en mémoire';
+    } catch {
+      zoneVersion.textContent = 'inconnue';
+    }
+  })();
+
+  try {
+    interrupteur.checked = localStorage.getItem('pronos_diag_scroll') === '1';
+  } catch { /* stockage indisponible */ }
+  interrupteur.addEventListener('change', () => {
+    try {
+      localStorage.setItem('pronos_diag_scroll', interrupteur.checked ? '1' : '0');
+      toast(interrupteur.checked ? 'Diagnostic activé' : 'Diagnostic désactivé', 'succes');
+    } catch {
+      toast('Stockage indisponible', 'echec');
+    }
+  });
+
+  boutonMaj.addEventListener('click', async () => {
+    boutonMaj.disabled = true;
+    boutonMaj.textContent = 'Mise à jour…';
+    try {
+      const inscriptions = await navigator.serviceWorker?.getRegistrations?.() || [];
+      await Promise.all(inscriptions.map((i) => i.unregister()));
+      const cles = await caches.keys();
+      await Promise.all(cles.map((c) => caches.delete(c)));
+    } catch { /* on recharge quand même */ }
+    // Paramètre unique : contourne aussi le cache du navigateur lui-même
+    window.location.replace(`${window.location.pathname}?maj=${Date.now()}`);
+  });
 }
 
 function champPalier(p) {
