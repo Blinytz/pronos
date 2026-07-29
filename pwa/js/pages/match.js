@@ -14,9 +14,9 @@ import {
 import { embleme, nomLigue } from '../ordre-ligues.js';
 import { brancherCases, casesScore, puceMises } from '../saisie.js';
 import {
-  badgesForme, blason, dateHeure, echapper, eclats, envoyerPieces, erreur,
-  formeDepuisMatchs, gainPari, libelleBonus, nombre, ordinal, probaImplicite,
-  squelettes, toast,
+  badgesForme, blason, boutonRetour, brancherRetour, dateHeure, echapper,
+  eclats, envoyerPieces, erreur, formeDepuisMatchs, gainPari, libelleBonus,
+  nombre, ordinal, probaImplicite, squelettes, toast,
 } from '../ui.js';
 
 const ISSUES = { home: 'domicile', draw: 'nul', away: 'extérieur' };
@@ -55,6 +55,7 @@ function rendre(conteneur, match, cotes, paris, reglages, brouillon) {
   const estChampionnat = match.league?.category === 'championnat';
 
   conteneur.innerHTML = `
+    ${boutonRetour('Tous les matchs')}
     <div class="carte">
       <div class="match-entete">
         <span class="competition">${embleme(match.league)}
@@ -109,6 +110,7 @@ function rendre(conteneur, match, cotes, paris, reglages, brouillon) {
   });
 
   if (ouvert) brancherPronostic(conteneur, match, cotes, reglages, brouillon);
+  brancherRetour(conteneur);
   brancherRecolte(conteneur);
   chargerOnglet(conteneur, match, cotes, reglages);
 }
@@ -251,6 +253,10 @@ function brancherPronostic(conteneur, match, cotes, reglages, brouillon) {
   };
 
   const majApercu = () => {
+    // L'enregistrement est différé : il peut aboutir après qu'on a quitté
+    // la fiche. Les éléments d'affichage n'existent alors plus, et écrire
+    // dedans planterait. La sauvegarde, elle, doit aboutir quand même.
+    if (!apercu?.isConnected) return;
     const [ph, pa] = champs.map((c) => c.value.trim());
     if (ph === '' || pa === '' || !cotes) { apercu.hidden = true; return; }
     const issue = Number(ph) > Number(pa) ? 'home'

@@ -4,7 +4,8 @@
 
 import { classementLigue, lireLigue } from '../api.js';
 import {
-  dateHeure, echapper, erreur, lienClassementExterne, nombre, squelettes, vide,
+  boutonRetour, brancherRetour, dateHeure, echapper, erreur,
+  lienClassementExterne, nombre, squelettes, vide,
 } from '../ui.js';
 
 export async function pageClassement(conteneur, leagueId) {
@@ -19,11 +20,13 @@ export async function pageClassement(conteneur, leagueId) {
     }
     if (!lignes.length) {
       conteneur.innerHTML = `
+        ${boutonRetour()}
         <h1>${echapper(ligue.name)}</h1>
         ${vide('📊', 'Classement pas encore synchronisé',
           'Il arrive dès que la compétition a joué un match.')}
         <a class="carte centre lien-classement" href="${lienClassementExterne(ligue)}"
           target="_blank" rel="noopener">🔗 Voir le classement officiel</a>`;
+      brancherRetour(conteneur);
       return;
     }
 
@@ -35,6 +38,7 @@ export async function pageClassement(conteneur, leagueId) {
     }
 
     conteneur.innerHTML = `
+      ${boutonRetour()}
       <h1>${echapper(ligue.name)}</h1>
       <p class="faible">Saison ${echapper(lignes[0].season)}
         · mis à jour le ${dateHeure(lignes[0].synced_at)}</p>
@@ -49,6 +53,7 @@ export async function pageClassement(conteneur, leagueId) {
             <tbody>${liste.map(ligneTableau).join('')}</tbody>
           </table>
         </div>`).join('')}`;
+    brancherRetour(conteneur);
   } catch (e) {
     conteneur.innerHTML = erreur(e);
   }

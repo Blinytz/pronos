@@ -118,6 +118,26 @@ export function lienClassementExterne(ligue) {
   return `https://www.google.com/search?q=${q}`;
 }
 
+// ---------- Navigation ----------
+
+// Retour vers l'écran précédent depuis une page de détail. On passe par
+// l'historique : c'est lui qui ramène à la bonne liste, à la bonne
+// position. Repli sur la page Paris si la fiche a été ouverte
+// directement (lien partagé, favori).
+export function boutonRetour(libelle = 'Retour') {
+  return `<button type="button" class="bouton-retour" data-retour>
+    <span aria-hidden="true">←</span> ${echapper(libelle)}</button>`;
+}
+
+export function brancherRetour(conteneur) {
+  conteneur.querySelectorAll('[data-retour]').forEach((b) => {
+    b.addEventListener('click', () => {
+      if (window.history.length > 1) window.history.back();
+      else window.location.hash = '#/';
+    });
+  });
+}
+
 // ---------- États de chargement et messages ----------
 
 export function squelettes(n = 4) {

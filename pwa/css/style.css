@@ -133,6 +133,16 @@ main {
 .barres-collantes .filtres { padding-bottom: .3rem; margin-bottom: .25rem; }
 .barres-collantes .mises-rapides { padding-bottom: 0; margin-bottom: 0; }
 
+/* ---------- Retour depuis une page de détail ---------- */
+.bouton-retour {
+  display: inline-flex; align-items: center; gap: .35rem;
+  background: none; border: 0; padding: .35rem .1rem .5rem;
+  color: var(--texte-doux); font-size: .88rem; font-weight: 600;
+  cursor: pointer;
+}
+.bouton-retour:hover { color: var(--or-fonce); }
+.bouton-retour:active { transform: translateX(-2px); }
+
 /* ---------- Sélecteur de dates ---------- */
 .bandeau-dates {
   position: sticky; top: var(--entete-h); z-index: 15;

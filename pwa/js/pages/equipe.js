@@ -6,8 +6,9 @@ import {
   statsParCompetition,
 } from '../api.js';
 import {
-  badgesForme, blason, dateHeure, echapper, erreur, formeDepuisMatchs,
-  lienClassementExterne, nombre, ordinal, squelettes, vide,
+  badgesForme, blason, boutonRetour, brancherRetour, dateHeure, echapper,
+  erreur, formeDepuisMatchs, lienClassementExterne, nombre, ordinal,
+  squelettes, vide,
 } from '../ui.js';
 
 export async function pageEquipe(conteneur, teamId) {
@@ -40,6 +41,7 @@ export async function pageEquipe(conteneur, teamId) {
         ${echapper(p.league?.name)} : ${echapper(ordinal(p.position))}</a>`).join(' · ');
 
     conteneur.innerHTML = `
+      ${boutonRetour()}
       <div class="carte centre">
         <div style="display:flex;justify-content:center;margin-bottom:.5rem">
           ${blason(equipe)}</div>
@@ -73,6 +75,7 @@ export async function pageEquipe(conteneur, teamId) {
 
       ${prochains.length ? `<h2>Prochains matchs</h2>
         ${prochains.map((m) => ligneMatch(m, teamId)).join('')}` : ''}`;
+    brancherRetour(conteneur);
   } catch (e) {
     conteneur.innerHTML = erreur(e);
   }
