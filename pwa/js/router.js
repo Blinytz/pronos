@@ -9,6 +9,7 @@ import { pageMesParis } from './pages/mes-paris.js';
 import { pageProfil } from './pages/profil.js';
 import { pageReglages } from './pages/reglages.js';
 import { pageStats } from './pages/stats.js';
+import { toast } from './ui.js';
 
 const ROUTES = [
   { motif: /^\/?$/, rendu: pageAccueil, onglet: 'paris' },
@@ -42,34 +43,59 @@ function memoriserPosition() {
 
 // La page se remplit en plusieurs temps : squelettes, puis données du
 // réseau. Tant qu'elle est trop courte, la position visée est hors
-// d'atteinte. On réessaie donc jusqu'à 4 secondes, ce qui couvre une
-// réponse serveur lente, et on s'arrête net dès que l'utilisateur reprend
-// la main ou qu'une autre navigation démarre.
+// d'atteinte : on réessaie jusqu'à 4 secondes.
 const DUREE_MAX_RESTAURATION = 4000;
+// Une fois la position atteinte, on la maintient un court instant : sur
+// mobile, un chargement d'image ou la barre d'adresse escamotable peut
+// encore déplacer la page juste après.
+const DUREE_MAINTIEN = 1200;
+// Sur mobile, un simple contact est fréquent pendant la transition (geste
+// de retour par balayage, doigt encore posé). Seul un vrai défilement
+// doit rendre la main, et pas dans les tout premiers instants.
+const DELAI_AVANT_ABANDON = 300;
+
+// Diagnostic activable en ouvrant l'app avec ?diag=scroll dans l'URL :
+// affiche ce qui a été mémorisé puis réellement restauré. Sert à lever
+// un doute sur un appareil qu'on ne peut pas inspecter directement.
+const DIAGNOSTIC = typeof location !== 'undefined'
+  && location.search.includes('diag=scroll');
 
 function restaurerPosition(cible, jeton) {
+  if (DIAGNOSTIC) {
+    const vise = cible ? Math.round(cible) : 0;
+    setTimeout(() => toast(`visé ${vise} · obtenu ${Math.round(window.scrollY)}`), 1600);
+  }
   if (!cible) { window.scrollTo(0, 0); return; }
   restaurationEnCours = true;
   const debut = performance.now();
   let abandonne = false;
+  let premiereArrivee = null;
 
-  const rendreLaMain = () => { abandonne = true; };
+  const rendreLaMain = () => {
+    if (performance.now() - debut > DELAI_AVANT_ABANDON) abandonne = true;
+  };
   const options = { passive: true };
   window.addEventListener('wheel', rendreLaMain, options);
-  window.addEventListener('touchstart', rendreLaMain, options);
+  window.addEventListener('touchmove', rendreLaMain, options);
 
   const terminer = () => {
     restaurationEnCours = false;
     window.removeEventListener('wheel', rendreLaMain, options);
-    window.removeEventListener('touchstart', rendreLaMain, options);
+    window.removeEventListener('touchmove', rendreLaMain, options);
   };
 
   const tenter = () => {
     if (abandonne || jeton !== jetonNavigation) { terminer(); return; }
+    const ecoule = performance.now() - debut;
     const hauteurUtile = document.documentElement.scrollHeight - window.innerHeight;
-    window.scrollTo(0, Math.min(cible, Math.max(hauteurUtile, 0)));
-    const arrive = Math.abs(window.scrollY - cible) <= 4;
-    if (arrive || performance.now() - debut > DUREE_MAX_RESTAURATION) {
+    const atteignable = Math.min(cible, Math.max(hauteurUtile, 0));
+    if (Math.abs(window.scrollY - atteignable) > 4) window.scrollTo(0, atteignable);
+
+    if (Math.abs(window.scrollY - cible) <= 4) {
+      // Position tenue : on surveille encore un peu avant de lâcher.
+      premiereArrivee = premiereArrivee ?? performance.now();
+      if (performance.now() - premiereArrivee > DUREE_MAINTIEN) { terminer(); return; }
+    } else if (ecoule > DUREE_MAX_RESTAURATION) {
       terminer();
       return;
     }
@@ -101,6 +127,12 @@ export async function naviguer() {
 }
 
 export function demarrerRouter() {
+  // Le navigateur restaure lui-même le défilement lors d'un retour
+  // arrière, souvent en différé sur mobile, ce qui écrasait notre propre
+  // repositionnement. On reprend la main dessus.
+  if ('scrollRestoration' in window.history) {
+    window.history.scrollRestoration = 'manual';
+  }
   window.addEventListener('hashchange', naviguer);
   // Le défilement courant est suivi en continu : au moment du changement
   // de page, la valeur est déjà connue.
