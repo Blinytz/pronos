@@ -35,37 +35,92 @@ let cheminCourant = null;
 let restaurationEnCours = false;
 let jetonNavigation = 0;
 
-// Le défilement ne se fait pas toujours sur la fenêtre : selon le
-// navigateur et la mise en page, il peut porter sur l'élément racine ou
-// sur le corps du document. On lit et on écrit donc via les trois, sinon
-// la position mesurée resterait à zéro et il n'y aurait rien à mémoriser.
+// Quel élément défile réellement ? Cela dépend du navigateur et de la
+// mise en page : la fenêtre, l'élément racine, le corps du document, ou
+// un conteneur interne. Plutôt que de le supposer, on l'apprend en
+// observant les événements de défilement, et on lit ou écrit la position
+// sur cet élément. Sans cela, la position mesurée reste à zéro et il n'y
+// a jamais rien à mémoriser.
+let elementDefilant = null;
+
+function racineDefilante() {
+  return elementDefilant || document.scrollingElement || document.documentElement;
+}
+
+function estRacineDeLaPage(el) {
+  return !el || el === document || el === document.scrollingElement
+    || el === document.documentElement || el === document.body;
+}
+
 function positionDefilement() {
-  return window.scrollY
-    || document.documentElement?.scrollTop
-    || document.body?.scrollTop
-    || 0;
+  const el = racineDefilante();
+  if (estRacineDeLaPage(el)) {
+    return window.scrollY
+      || document.scrollingElement?.scrollTop
+      || document.documentElement?.scrollTop
+      || document.body?.scrollTop
+      || 0;
+  }
+  return el.scrollTop || 0;
 }
 
 function allerA(y) {
+  const el = racineDefilante();
+  if (!estRacineDeLaPage(el)) { el.scrollTop = y; return; }
   window.scrollTo(0, y);
   if (Math.abs(positionDefilement() - y) > 4) {
+    if (document.scrollingElement) document.scrollingElement.scrollTop = y;
     if (document.documentElement) document.documentElement.scrollTop = y;
     if (document.body) document.body.scrollTop = y;
   }
 }
 
 function hauteurDefilable() {
-  const doc = document.documentElement;
+  const el = racineDefilante();
+  if (!estRacineDeLaPage(el)) {
+    return Math.max(el.scrollHeight - el.clientHeight, 0);
+  }
   const hauteurTotale = Math.max(
-    doc?.scrollHeight || 0, document.body?.scrollHeight || 0,
+    document.documentElement?.scrollHeight || 0,
+    document.body?.scrollHeight || 0,
   );
   return Math.max(hauteurTotale - window.innerHeight, 0);
 }
 
+// Identifie la source d'un défilement. Les bandeaux horizontaux (dates,
+// compétitions, mises) émettent aussi cet événement : on ne retient que
+// ce qui peut défiler verticalement.
+function noterSourceDefilement(cible) {
+  if (estRacineDeLaPage(cible)) {
+    elementDefilant = document.scrollingElement || document.documentElement;
+    return;
+  }
+  if (cible instanceof Element && cible.scrollHeight > cible.clientHeight + 8) {
+    elementDefilant = cible;
+  }
+}
+
+function nomSource() {
+  const el = racineDefilante();
+  if (estRacineDeLaPage(el)) return 'page';
+  return `${el.tagName.toLowerCase()}.${(el.className || '').split(' ')[0] || '?'}`;
+}
+
+// Gelée juste après un clic sur un lien interne : certains navigateurs
+// mobiles remontent la page en traitant le fragment, ce qui écraserait
+// par zéro la position de lecture qu'on vient de capturer.
+let memorisationGelee = false;
+
 function memoriserPosition() {
-  if (cheminCourant && !restaurationEnCours) {
+  if (cheminCourant && !restaurationEnCours && !memorisationGelee) {
     positions.set(cheminCourant, positionDefilement());
   }
+}
+
+function figerPositionAvantNavigation() {
+  memoriserPosition();
+  memorisationGelee = true;
+  setTimeout(() => { memorisationGelee = false; }, 900);
 }
 
 // La page se remplit en plusieurs temps : squelettes, puis données du
@@ -102,8 +157,9 @@ function annoncerDiagnostic(cible, chemin) {
   const vise = cible ? Math.round(cible) : 'rien';
   // Affichage long : ce message doit pouvoir être lu et recopié.
   setTimeout(() => toast(
-    `${chemin} · visé ${vise} · obtenu ${Math.round(positionDefilement())}`,
-    '', 8000,
+    `${chemin} · visé ${vise} · obtenu ${Math.round(positionDefilement())}`
+    + ` · src ${nomSource()} · h ${hauteurDefilable()}`,
+    '', 9000,
   ), 2200);
 }
 
@@ -155,7 +211,11 @@ export async function naviguer() {
     if (m) {
       memoriserPosition();
       if (diagnosticActif() && cheminCourant) {
-        toast(`quitte ${cheminCourant} @${Math.round(positionDefilement())}`, '', 5000);
+        // On annonce la valeur retenue, pas la position instantanée : le
+        // navigateur a pu remonter la page entre le clic et cet instant.
+        const retenue = positions.get(cheminCourant);
+        toast(`quitte ${cheminCourant} @${retenue === undefined ? 'rien' : Math.round(retenue)}`,
+          '', 5000);
       }
       const jeton = ++jetonNavigation;   // annule une restauration en cours
       document.querySelectorAll('#onglets a').forEach((a) => {
@@ -182,6 +242,20 @@ export function demarrerRouter() {
     window.history.scrollRestoration = 'manual';
   }
   window.addEventListener('hashchange', naviguer);
+  // Écoute en capture sur le document : contrairement à une écoute sur la
+  // fenêtre, elle reçoit aussi le défilement d'un conteneur interne, ce
+  // qui permet d'identifier lequel porte la position de lecture.
+  document.addEventListener('scroll', (evt) => {
+    noterSourceDefilement(evt.target);
+    memoriserPosition();
+  }, { capture: true, passive: true });
+  // La position est saisie au clic, avant que le navigateur ne traite le
+  // fragment : c'est le dernier instant où elle est encore fiable.
+  document.addEventListener('click', (evt) => {
+    if (evt.target?.closest?.('a[href^="#"], [data-retour], #onglets a')) {
+      figerPositionAvantNavigation();
+    }
+  }, { capture: true });
   // Le défilement courant est suivi en continu : au moment du changement
   // de page, la valeur est déjà connue.
   window.addEventListener('scroll', memoriserPosition, { passive: true });

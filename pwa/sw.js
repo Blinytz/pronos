@@ -3,7 +3,7 @@
 
 // Incrémenter à chaque déploiement qui modifie le shell : l'activation
 // purge l'ancien cache et évite de servir des modules JS périmés.
-const CACHE = 'pronos-v23';
+const CACHE = 'pronos-v25';
 const SHELL = [
   './', 'index.html', 'css/style.css', 'manifest.json',
   'js/app.js', 'js/router.js', 'js/supabase.js', 'js/api.js', 'js/ui.js',
