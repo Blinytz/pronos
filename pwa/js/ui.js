@@ -155,7 +155,7 @@ export function erreur(e) {
     <p class="erreur">${echapper(e.message || e)}</p></div>`;
 }
 
-export function toast(message, type = '') {
+export function toast(message, type = '', duree = 2600) {
   const zone = document.getElementById('toasts');
   if (!zone) return;
   const el = document.createElement('div');
@@ -166,7 +166,7 @@ export function toast(message, type = '') {
     el.style.transition = 'opacity .3s';
     el.style.opacity = '0';
     setTimeout(() => el.remove(), 300);
-  }, 2600);
+  }, duree);
 }
 
 export function vibrer(ms = 12) {

@@ -35,9 +35,36 @@ let cheminCourant = null;
 let restaurationEnCours = false;
 let jetonNavigation = 0;
 
+// Le défilement ne se fait pas toujours sur la fenêtre : selon le
+// navigateur et la mise en page, il peut porter sur l'élément racine ou
+// sur le corps du document. On lit et on écrit donc via les trois, sinon
+// la position mesurée resterait à zéro et il n'y aurait rien à mémoriser.
+function positionDefilement() {
+  return window.scrollY
+    || document.documentElement?.scrollTop
+    || document.body?.scrollTop
+    || 0;
+}
+
+function allerA(y) {
+  window.scrollTo(0, y);
+  if (Math.abs(positionDefilement() - y) > 4) {
+    if (document.documentElement) document.documentElement.scrollTop = y;
+    if (document.body) document.body.scrollTop = y;
+  }
+}
+
+function hauteurDefilable() {
+  const doc = document.documentElement;
+  const hauteurTotale = Math.max(
+    doc?.scrollHeight || 0, document.body?.scrollHeight || 0,
+  );
+  return Math.max(hauteurTotale - window.innerHeight, 0);
+}
+
 function memoriserPosition() {
   if (cheminCourant && !restaurationEnCours) {
-    positions.set(cheminCourant, window.scrollY);
+    positions.set(cheminCourant, positionDefilement());
   }
 }
 
@@ -68,17 +95,21 @@ function diagnosticActif() {
   }
 }
 
-function restaurerPosition(cible, jeton) {
-  // Message affiché seulement quand une position est réellement visée,
-  // c'est à dire au retour vers une liste : ouvrir une fiche remonte
-  // toujours en haut et n'a rien à signaler.
-  if (cible && diagnosticActif()) {
-    setTimeout(
-      () => toast(`visé ${Math.round(cible)} · obtenu ${Math.round(window.scrollY)}`),
-      2200,
-    );
-  }
-  if (!cible) { window.scrollTo(0, 0); return; }
+// Le message s'affiche même quand rien n'a été mémorisé : c'est
+// justement le cas qu'il faut pouvoir observer.
+function annoncerDiagnostic(cible, chemin) {
+  if (!diagnosticActif()) return;
+  const vise = cible ? Math.round(cible) : 'rien';
+  // Affichage long : ce message doit pouvoir être lu et recopié.
+  setTimeout(() => toast(
+    `${chemin} · visé ${vise} · obtenu ${Math.round(positionDefilement())}`,
+    '', 8000,
+  ), 2200);
+}
+
+function restaurerPosition(cible, jeton, chemin) {
+  annoncerDiagnostic(cible, chemin);
+  if (!cible) { allerA(0); return; }
   restaurationEnCours = true;
   const debut = performance.now();
   let abandonne = false;
@@ -100,11 +131,10 @@ function restaurerPosition(cible, jeton) {
   const tenter = () => {
     if (abandonne || jeton !== jetonNavigation) { terminer(); return; }
     const ecoule = performance.now() - debut;
-    const hauteurUtile = document.documentElement.scrollHeight - window.innerHeight;
-    const atteignable = Math.min(cible, Math.max(hauteurUtile, 0));
-    if (Math.abs(window.scrollY - atteignable) > 4) window.scrollTo(0, atteignable);
+    const atteignable = Math.min(cible, hauteurDefilable());
+    if (Math.abs(positionDefilement() - atteignable) > 4) allerA(atteignable);
 
-    if (Math.abs(window.scrollY - cible) <= 4) {
+    if (Math.abs(positionDefilement() - cible) <= 4) {
       // Position tenue : on surveille encore un peu avant de lâcher.
       premiereArrivee = premiereArrivee ?? performance.now();
       if (performance.now() - premiereArrivee > DUREE_MAINTIEN) { terminer(); return; }
@@ -124,6 +154,9 @@ export async function naviguer() {
     const m = chemin.match(route.motif);
     if (m) {
       memoriserPosition();
+      if (diagnosticActif() && cheminCourant) {
+        toast(`quitte ${cheminCourant} @${Math.round(positionDefilement())}`, '', 5000);
+      }
       const jeton = ++jetonNavigation;   // annule une restauration en cours
       document.querySelectorAll('#onglets a').forEach((a) => {
         a.classList.toggle('actif', a.dataset.route === route.onglet);
@@ -131,7 +164,9 @@ export async function naviguer() {
       await route.rendu(conteneur, ...m.slice(1));
       if (jeton !== jetonNavigation) return;   // une autre navigation a pris le relais
       cheminCourant = chemin;
-      restaurerPosition(LISTES.has(route.onglet) ? positions.get(chemin) : 0, jeton);
+      restaurerPosition(
+        LISTES.has(route.onglet) ? positions.get(chemin) : 0, jeton, chemin,
+      );
       return;
     }
   }
