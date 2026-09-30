@@ -1,0 +1,41 @@
+# Maintien des workflows planifiés (anti-désactivation à 60 jours).
+#
+# Pourquoi : GitHub désactive automatiquement les workflows cron après
+# 60 jours sans activité sur le dépôt. Les syncs (resultats, football,
+# rugby) tournent mais ne commitent rien : le dépôt paraît inactif et
+# finit coupé, ce qui gèle la validation des brouillons et le règlement
+# des paris (donc toute l'économie d'Éclats de pronos).
+#
+# Remède : un passage hebdomadaire qui ne pousse un commit vide QUE
+# lorsque le dernier commit approche des 60 jours (seuil 50 j). Ce commit
+# recharge le compteur d'inactivité pour TOUS les workflows planifiés du
+# dépôt, y compris celui-ci. Un push par le GITHUB_TOKEN ne redéclenche
+# aucun autre workflow : pas de boucle de cron.
+name: keepalive
+
+on:
+  schedule:
+    - cron: "30 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Commit vide si le dépôt approche des 60 jours d'inactivité
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          age=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
+          echo "Dernier commit il y a $age jour(s) (seuil de maintien : 50 j)."
+          if [ "$age" -ge 50 ]; then
+            git commit --allow-empty -m "keepalive: maintien des workflows planifiés"
+            git push origin HEAD:${{ github.ref_name }}
+            echo "Commit de maintien poussé."
+          else
+            echo "Rien à faire pour l'instant."
+          fi
